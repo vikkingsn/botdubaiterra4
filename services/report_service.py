@@ -2,7 +2,7 @@
 Сервис для генерации отчетов
 """
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional
 from database import crud
 from database.models import MailingCampaign, Template, User, SendingHistory
 from utils.formatters import format_personal_report, format_summary_report

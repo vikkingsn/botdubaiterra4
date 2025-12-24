@@ -7,7 +7,7 @@ from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import (
     User, Template, MailingCampaign, Recipient, 
-    SendingHistory, ReportReceiver, async_session_maker
+    SendingHistory, ReportReceiver, ReportReceiverList, BotGroup, async_session_maker
 )
 import uuid
 
@@ -46,6 +46,34 @@ async def get_or_create_user(telegram_id: int, username: Optional[str] = None,
         return user
 
 
+async def update_user_client_auth(telegram_id: int, api_id: Optional[int] = None,
+                                  api_hash: Optional[str] = None, 
+                                  phone_number: Optional[str] = None,
+                                  has_auth: bool = True) -> User:
+    """Обновить настройки Client API для пользователя"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(User).where(User.telegram_id == telegram_id)
+        )
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            raise ValueError(f"Пользователь {telegram_id} не найден")
+        
+        if api_id is not None:
+            user.api_id = api_id
+        if api_hash is not None:
+            user.api_hash = api_hash
+        if phone_number is not None:
+            user.phone_number = phone_number
+        user.has_client_auth = has_auth
+        user.updated_at = datetime.now()
+        
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+
 async def get_user_by_telegram_id(telegram_id: int) -> Optional[User]:
     """Получить пользователя по Telegram ID"""
     async with async_session_maker() as session:
@@ -57,13 +85,19 @@ async def get_user_by_telegram_id(telegram_id: int) -> Optional[User]:
 
 # ========== TEMPLATE OPERATIONS ==========
 
-async def create_template(name: str, text: str, created_by: int) -> Template:
+async def create_template(name: str, text: str, created_by: int, 
+                         media_type: Optional[str] = None,
+                         media_file_id: Optional[str] = None,
+                         media_file_unique_id: Optional[str] = None) -> Template:
     """Создать шаблон"""
     async with async_session_maker() as session:
         template = Template(
             name=name,
             text=text,
-            created_by=created_by
+            created_by=created_by,
+            media_type=media_type,
+            media_file_id=media_file_id,
+            media_file_unique_id=media_file_unique_id
         )
         session.add(template)
         await session.commit()
@@ -89,10 +123,62 @@ async def get_all_active_templates() -> List[Template]:
         return list(result.scalars().all())
 
 
+async def update_template(template_id: int, name: Optional[str] = None, text: Optional[str] = None,
+                         media_type: Optional[str] = None, media_file_id: Optional[str] = None,
+                         media_file_unique_id: Optional[str] = None) -> Optional[Template]:
+    """Обновить шаблон"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Template).where(Template.id == template_id)
+        )
+        template = result.scalar_one_or_none()
+        
+        if not template:
+            return None
+        
+        if name is not None:
+            template.name = name
+        if text is not None:
+            template.text = text
+        if media_type is not None:
+            template.media_type = media_type
+        if media_file_id is not None:
+            template.media_file_id = media_file_id
+        if media_file_unique_id is not None:
+            template.media_file_unique_id = media_file_unique_id
+        
+        await session.commit()
+        await session.refresh(template)
+        return template
+
+
+async def delete_template(template_id: int) -> bool:
+    """Удалить шаблон (пометить как неактивный)"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Template).where(Template.id == template_id)
+        )
+        template = result.scalar_one_or_none()
+        
+        if not template:
+            return False
+        
+        template.is_active = False
+        await session.commit()
+        return True
+
+
 # ========== CAMPAIGN OPERATIONS ==========
 
-async def create_campaign(owner_id: int, template_id: int) -> MailingCampaign:
-    """Создать новую рассылку"""
+async def create_campaign(owner_id: int, template_id: int, delay_seconds: int = 5, max_recipients: Optional[int] = None) -> MailingCampaign:
+    """Создать новую рассылку
+    
+    Args:
+        owner_id: ID владельца рассылки
+        template_id: ID шаблона
+        delay_seconds: Интервал между сообщениями в секундах (по умолчанию 5)
+        max_recipients: Максимальное количество получателей (10, 50, 100, 300, 500)
+    """
     async with async_session_maker() as session:
         # Генерируем уникальный ID рассылки
         campaign_id = f"MAIL-{uuid.uuid4().hex[:8].upper()}"
@@ -101,7 +187,9 @@ async def create_campaign(owner_id: int, template_id: int) -> MailingCampaign:
             campaign_id=campaign_id,
             owner_id=owner_id,
             template_id=template_id,
-            status="pending"
+            status="pending",
+            delay_seconds=delay_seconds,
+            max_recipients=max_recipients
         )
         session.add(campaign)
         await session.commit()
@@ -270,8 +358,100 @@ async def get_campaign_sending_history(campaign_id: int) -> List[SendingHistory]
 
 # ========== REPORT RECEIVER OPERATIONS ==========
 
-async def add_report_receivers(identifiers: List[str]) -> List[ReportReceiver]:
-    """Добавить получателей сводных отчетов"""
+# ========== REPORT RECEIVER LIST OPERATIONS ==========
+
+async def create_report_receiver_list(name: str) -> ReportReceiverList:
+    """Создать новый список получателей отчетов"""
+    async with async_session_maker() as session:
+        receiver_list = ReportReceiverList(
+            name=name,
+            is_active=True
+        )
+        session.add(receiver_list)
+        await session.commit()
+        await session.refresh(receiver_list)
+        return receiver_list
+
+
+async def get_all_report_receiver_lists() -> List[ReportReceiverList]:
+    """Получить все активные списки получателей отчетов"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(ReportReceiverList)
+            .where(ReportReceiverList.is_active == True)
+            .order_by(ReportReceiverList.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+
+async def get_report_receiver_list(list_id: int) -> Optional[ReportReceiverList]:
+    """Получить список получателей по ID"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(ReportReceiverList).where(ReportReceiverList.id == list_id)
+        )
+        return result.scalar_one_or_none()
+
+
+async def update_report_receiver_list(list_id: int, name: Optional[str] = None) -> Optional[ReportReceiverList]:
+    """Обновить список получателей"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(ReportReceiverList).where(ReportReceiverList.id == list_id)
+        )
+        receiver_list = result.scalar_one_or_none()
+        
+        if not receiver_list:
+            return None
+        
+        if name is not None:
+            receiver_list.name = name
+        receiver_list.updated_at = datetime.now()
+        
+        await session.commit()
+        await session.refresh(receiver_list)
+        return receiver_list
+
+
+async def delete_report_receiver_list(list_id: int) -> bool:
+    """Удалить список получателей (пометить как неактивный)"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(ReportReceiverList).where(ReportReceiverList.id == list_id)
+        )
+        receiver_list = result.scalar_one_or_none()
+        
+        if not receiver_list:
+            return False
+        
+        receiver_list.is_active = False
+        await session.commit()
+        return True
+
+
+async def get_receivers_by_list(list_id: int) -> List[ReportReceiver]:
+    """Получить всех получателей из списка"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(ReportReceiver)
+            .where(
+                and_(
+                    ReportReceiver.list_id == list_id,
+                    ReportReceiver.is_active == True
+                )
+            )
+            .order_by(ReportReceiver.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+
+async def add_report_receivers_to_list(list_id: int, identifiers: List[str]) -> List[ReportReceiver]:
+    """Добавить получателей в список
+    
+    Поддерживает пользователей, группы и каналы
+    """
+    from utils.parsers import normalize_identifier
+    
     async with async_session_maker() as session:
         receivers = []
         for identifier in identifiers:
@@ -279,26 +459,35 @@ async def add_report_receivers(identifiers: List[str]) -> List[ReportReceiver]:
             if not identifier:
                 continue
             
-            # Определяем тип идентификатора
-            if identifier.startswith("@"):
-                identifier_type = "username"
-                normalized = identifier.lower()
-            else:
-                try:
-                    telegram_id = int(identifier)
-                    identifier_type = "user_id"
-                    normalized = str(telegram_id)
-                except ValueError:
-                    continue
+            # Нормализуем идентификатор (поддерживает пользователей, группы, каналы)
+            normalized = normalize_identifier(identifier)
+            if not normalized:
+                continue
             
-            # Проверяем, существует ли уже
+            # Определяем тип идентификатора
+            if identifier.isdigit():
+                identifier_type = "user_id"
+            elif identifier.startswith("@"):
+                identifier_type = "username"  # Может быть пользователь или группа
+            elif "t.me" in identifier or "telegram.me" in identifier:
+                identifier_type = "link"  # Может быть ссылка на пользователя или группу
+            else:
+                identifier_type = "username"
+            
+            # Проверяем, существует ли уже в этом списке
             result = await session.execute(
-                select(ReportReceiver).where(ReportReceiver.identifier == normalized)
+                select(ReportReceiver).where(
+                    and_(
+                        ReportReceiver.list_id == list_id,
+                        ReportReceiver.identifier == normalized
+                    )
+                )
             )
             existing = result.scalar_one_or_none()
             
             if not existing:
                 receiver = ReportReceiver(
+                    list_id=list_id,
                     identifier=normalized,
                     identifier_type=identifier_type
                 )
@@ -309,8 +498,24 @@ async def add_report_receivers(identifiers: List[str]) -> List[ReportReceiver]:
         return receivers
 
 
+async def delete_report_receiver(receiver_id: int) -> bool:
+    """Удалить получателя из списка (пометить как неактивный)"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(ReportReceiver).where(ReportReceiver.id == receiver_id)
+        )
+        receiver = result.scalar_one_or_none()
+        
+        if not receiver:
+            return False
+        
+        receiver.is_active = False
+        await session.commit()
+        return True
+
+
 async def get_all_report_receivers() -> List[ReportReceiver]:
-    """Получить всех активных получателей отчетов"""
+    """Получить всех активных получателей отчетов (из всех списков)"""
     async with async_session_maker() as session:
         result = await session.execute(
             select(ReportReceiver).where(ReportReceiver.is_active == True)
@@ -376,3 +581,94 @@ async def get_error_statistics(start_date: datetime, end_date: datetime) -> Dict
             error_stats[row.error_type or "unknown"] = row.count
         
         return error_stats
+
+
+# ========== BOT GROUP OPERATIONS ==========
+
+async def add_or_update_bot_group(
+    chat_id: int,
+    title: Optional[str] = None,
+    username: Optional[str] = None,
+    chat_type: str = "group",
+    members_count: Optional[int] = None,
+    is_active: bool = True
+) -> BotGroup:
+    """Добавить или обновить группу бота"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(BotGroup).where(BotGroup.chat_id == chat_id)
+        )
+        bot_group = result.scalar_one_or_none()
+        
+        if not bot_group:
+            bot_group = BotGroup(
+                chat_id=chat_id,
+                title=title,
+                username=username,
+                chat_type=chat_type,
+                members_count=members_count,
+                is_active=is_active
+            )
+            session.add(bot_group)
+        else:
+            # Обновляем существующую запись
+            bot_group.title = title or bot_group.title
+            bot_group.username = username or bot_group.username
+            bot_group.chat_type = chat_type
+            bot_group.members_count = members_count or bot_group.members_count
+            bot_group.is_active = is_active
+            bot_group.updated_at = datetime.now()
+        
+        await session.commit()
+        await session.refresh(bot_group)
+        return bot_group
+
+
+async def get_bot_group(chat_id: int) -> Optional[BotGroup]:
+    """Получить группу бота по chat_id"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(BotGroup).where(BotGroup.chat_id == chat_id)
+        )
+        return result.scalar_one_or_none()
+
+
+async def get_all_bot_groups(active_only: bool = True) -> List[BotGroup]:
+    """Получить все группы бота"""
+    async with async_session_maker() as session:
+        query = select(BotGroup)
+        if active_only:
+            query = query.where(BotGroup.is_active == True)
+        query = query.order_by(BotGroup.title)
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
+async def remove_bot_group(chat_id: int) -> bool:
+    """Удалить группу бота (пометить как неактивную)"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(BotGroup).where(BotGroup.chat_id == chat_id)
+        )
+        bot_group = result.scalar_one_or_none()
+        
+        if bot_group:
+            bot_group.is_active = False
+            bot_group.updated_at = datetime.now()
+            await session.commit()
+            return True
+        return False
+
+
+async def update_bot_group_members_count(chat_id: int, members_count: int):
+    """Обновить количество участников группы"""
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(BotGroup).where(BotGroup.chat_id == chat_id)
+        )
+        bot_group = result.scalar_one_or_none()
+        
+        if bot_group:
+            bot_group.members_count = members_count
+            bot_group.updated_at = datetime.now()
+            await session.commit()

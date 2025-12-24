@@ -13,6 +13,8 @@ def normalize_identifier(identifier: str) -> str:
     123456 -> 123456
     https://t.me/user1 -> user1
     t.me/user1 -> user1
+    https://t.me/groupname -> groupname (для групп/каналов)
+    @groupname -> groupname (для групп/каналов)
     """
     identifier = identifier.strip()
     
@@ -22,12 +24,14 @@ def normalize_identifier(identifier: str) -> str:
     
     # Обработка ссылок
     if "t.me/" in identifier or "telegram.me/" in identifier:
-        # Извлекаем username из ссылки
-        match = re.search(r'(?:t\.me/|telegram\.me/)([a-zA-Z0-9_]+)', identifier)
+        # Извлекаем username/groupname из ссылки
+        # Поддерживаем как https://t.me/username, так и https://t.me/c/chat_id/123
+        match = re.search(r'(?:t\.me/|telegram\.me/)(?:c/)?([a-zA-Z0-9_]+)', identifier)
         if match:
             identifier = match.group(1)
     
-    # Удаляем все недопустимые символы для username
+    # Удаляем все недопустимые символы для username/groupname
+    # Для групп/каналов допустимы те же символы, что и для username
     identifier = re.sub(r'[^a-zA-Z0-9_]', '', identifier)
     
     return identifier.lower() if identifier else ""
@@ -38,9 +42,11 @@ def parse_recipients_list(text: str) -> List[Dict]:
     Парсит список получателей из текста
     
     Поддерживает:
-    - @username
-    - user_id (числа)
+    - @username (пользователи)
+    - user_id (числа, включая отрицательные для групп)
     - Ссылки (https://t.me/user, t.me/user)
+    - Группы/каналы (@groupname, https://t.me/groupname)
+    - Приватные группы (https://t.me/joinchat/HASH, t.me/+HASH)
     - Разделители: запятая, пробел, новая строка
     """
     # Разделяем по запятым, пробелам и переносам строк
@@ -63,14 +69,20 @@ def parse_recipients_list(text: str) -> List[Dict]:
         seen.add(normalized)
         
         # Определяем тип идентификатора
-        if part.isdigit():
-            identifier_type = "user_id"
+        if part.isdigit() or (part.startswith("-") and part[1:].isdigit()):
+            # Это user_id или chat_id (может быть отрицательным для групп)
+            identifier_type = "chat_id"
         elif part.startswith("@"):
-            identifier_type = "username"
+            # Может быть как пользователь, так и группа/канал
+            identifier_type = "username"  # Pyrogram сам определит тип чата
         elif "t.me" in part or "telegram.me" in part:
-            identifier_type = "link"
+            # Проверяем, это invite-ссылка или обычная ссылка
+            if "joinchat" in part or "/+" in part:
+                identifier_type = "invite_link"  # Приватная группа по invite-ссылке
+            else:
+                identifier_type = "link"  # Может быть ссылка на пользователя или группу
         else:
-            # Пытаемся определить как username
+            # Пытаемся определить как username (может быть группа)
             identifier_type = "username"
         
         recipients.append({

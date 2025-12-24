@@ -6,8 +6,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Telegram Bot Token
+# Telegram Bot Token (для управления ботом)
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+
+# Telegram Client API (для отправки сообщений от имени пользователя)
+API_ID = int(os.getenv("API_ID", "0"))
+API_HASH = os.getenv("API_HASH", "")
+PHONE_NUMBER = os.getenv("PHONE_NUMBER", "")  # Номер телефона в формате +79991234567
 
 # Главный администратор (фиксированный Telegram ID)
 MAIN_ADMIN_ID = int(os.getenv("MAIN_ADMIN_ID", "0"))

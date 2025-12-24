@@ -42,26 +42,15 @@ async def handle_send_duplicates(callback: CallbackQuery):
         await callback.answer("Нет дублей для отправки", show_alert=True)
         return
     
-    await callback.message.edit_text("✅ Отправка дублей начата...")
+    await callback.message.edit_text("ℹ️ Дубли не отправляются, так как сообщение уже было отправлено этим пользователям ранее.")
     await callback.answer()
     
-    # Получаем шаблон
-    template = await crud.get_template(campaign.template_id)
-    
-    # Отправляем дубли
-    result = await send_duplicates(
-        callback.bot,
-        campaign,
-        template,
-        duplicate_recipients
-    )
-    
     await callback.message.answer(
-        f"✅ Дубли отправлены!\n"
-        f"Успешно: {result['sent']}\n"
-        f"Ошибок: {result['failed']}"
+        f"ℹ️ Дубли не отправляются\n\n"
+        f"Сообщение уже было отправлено этим пользователям в предыдущих рассылках.\n"
+        f"Повторная отправка не выполняется."
     )
-    logger.info(f"Дубли отправлены для рассылки {campaign.campaign_id}")
+    logger.info(f"Попытка отправить дубли для рассылки {campaign.campaign_id} - дубли не отправляются")
 
 
 @router.callback_query(F.data.startswith("skip_duplicates_"))

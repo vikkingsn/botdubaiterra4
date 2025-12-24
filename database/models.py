@@ -23,6 +23,13 @@ class User(Base):
     first_name = Column(String(255), nullable=True)
     last_name = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
+    
+    # Client API настройки (для отправки от имени пользователя)
+    api_id = Column(Integer, nullable=True)
+    api_hash = Column(String(255), nullable=True)
+    phone_number = Column(String(50), nullable=True)
+    has_client_auth = Column(Boolean, default=False)  # Авторизован ли Client API
+    
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
@@ -40,6 +47,11 @@ class Template(Base):
     created_by = Column(Integer, ForeignKey("users.telegram_id"), nullable=False)
     created_at = Column(DateTime, default=func.now())
     is_active = Column(Boolean, default=True)
+    
+    # Медиа файлы (file_id из Telegram)
+    media_type = Column(String(50), nullable=True)  # photo, video, document, audio, voice, video_note, animation
+    media_file_id = Column(String(255), nullable=True)  # file_id медиа файла
+    media_file_unique_id = Column(String(255), nullable=True)  # file_unique_id для проверки уникальности
     
     # Связи
     campaigns = relationship("MailingCampaign", back_populates="template")
@@ -60,6 +72,8 @@ class MailingCampaign(Base):
     sent_successfully = Column(Integer, default=0)
     sent_failed = Column(Integer, default=0)
     duplicates_count = Column(Integer, default=0)
+    delay_seconds = Column(Integer, default=5)  # Интервал между сообщениями в секундах
+    max_recipients = Column(Integer, nullable=True)  # Максимальное количество получателей для рассылки (10, 50, 100, 300, 500)
     created_at = Column(DateTime, default=func.now())
     
     # Связи
@@ -107,16 +121,49 @@ class SendingHistory(Base):
     campaign = relationship("MailingCampaign", back_populates="sending_history")
 
 
+class ReportReceiverList(Base):
+    """Списки получателей сводных отчетов"""
+    __tablename__ = "report_receiver_lists"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)  # Название списка
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Связи
+    receivers = relationship("ReportReceiver", back_populates="list", cascade="all, delete-orphan")
+
+
 class ReportReceiver(Base):
     """Получатели сводных отчетов"""
     __tablename__ = "report_receivers"
     
     id = Column(Integer, primary_key=True)
-    identifier = Column(String(255), nullable=False, unique=True)  # username или user_id
+    list_id = Column(Integer, ForeignKey("report_receiver_lists.id"), nullable=False)  # Связь со списком
+    identifier = Column(String(255), nullable=False)  # username или user_id
     identifier_type = Column(String(20), nullable=False)  # username или user_id
     telegram_id = Column(Integer, nullable=True)  # заполняется при первом отчете
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
+    
+    # Связи
+    list = relationship("ReportReceiverList", back_populates="receivers")
+
+
+class BotGroup(Base):
+    """Группы и каналы, в которых находится бот"""
+    __tablename__ = "bot_groups"
+    
+    id = Column(Integer, primary_key=True)
+    chat_id = Column(Integer, unique=True, nullable=False, index=True)  # ID чата (может быть отрицательным для групп)
+    title = Column(String(255), nullable=True)  # Название группы/канала
+    username = Column(String(255), nullable=True)  # Username группы/канала (если есть)
+    chat_type = Column(String(50), nullable=False)  # group, supergroup, channel
+    is_active = Column(Boolean, default=True)  # Активна ли группа (бот не удален)
+    members_count = Column(Integer, nullable=True)  # Количество участников (если доступно)
+    added_at = Column(DateTime, default=func.now())  # Когда бот был добавлен
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
 # Создание движка и сессии

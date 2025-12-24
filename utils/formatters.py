@@ -32,7 +32,7 @@ def format_personal_report(campaign: MailingCampaign, template: Template,
     # Группируем ошибки
     error_messages = {
         "blocked": "пользователь заблокировал бота",
-        "invalid_user": "неверный username",
+        "invalid_user": "пользователь не найден или не начинал диалог с ботом",
         "deleted": "аккаунт удален",
         "privacy": "ограничения приватности",
         "rate_limit": "превышен лимит сообщений",
@@ -46,11 +46,15 @@ def format_personal_report(campaign: MailingCampaign, template: Template,
             error_msg = error_messages.get(h.error_type, "неизвестная ошибка")
             failed_recipients.append(f"• {h.recipient_identifier} - {error_msg}")
     
-    # Формируем отчет
+    # Формируем отчет (используем простой текст, без Markdown/HTML разметки)
+    # Экранируем специальные символы которые могут вызвать проблемы
+    owner_username = (owner.username or 'не указан').replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]')
+    template_name = template.name.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]')
+    
     report = f"""📊 ВАШ ОТЧЕТ #{campaign.id}
 
-Владелец: @{owner.username or 'не указан'}
-Шаблон: "{template.name}" (#{template.id})
+Владелец: @{owner_username}
+Шаблон: "{template_name}" (#{template.id})
 Время рассылки: {time_range}
 
 СТАТИСТИКА:
