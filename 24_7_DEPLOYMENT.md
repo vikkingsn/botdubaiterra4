@@ -84,8 +84,8 @@ git push
 
 1. Перейдите в **Variables**
 2. Добавьте переменные:
-   - `BOT_TOKEN` = `8558311268:AAFmtj9ZTr56ZziEGgsS5wY6tG9sinHkoXE`
-   - `MAIN_ADMIN_ID` = `120661515`
+   - `BOT_TOKEN` = `ваш_токен_от_BotFather`
+   - `MAIN_ADMIN_ID` = `ваш_telegram_id`
    - `DATABASE_URL` = `sqlite+aiosqlite:///bot.db`
 
 ### Шаг 4: Настройте команду запуска
@@ -166,8 +166,8 @@ nano .env
 
 Добавьте:
 ```env
-BOT_TOKEN=8558311268:AAFmtj9ZTr56ZziEGgsS5wY6tG9sinHkoXE
-MAIN_ADMIN_ID=120661515
+BOT_TOKEN=ваш_токен_от_BotFather
+MAIN_ADMIN_ID=ваш_telegram_id
 DATABASE_URL=sqlite+aiosqlite:///bot.db
 ```
 

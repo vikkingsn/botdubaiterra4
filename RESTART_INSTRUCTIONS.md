@@ -61,7 +61,7 @@ python3 main.py
 2025-12-21 ... - INFO - Запуск бота...
 2025-12-21 ... - INFO - Инициализация базы данных...
 2025-12-21 ... - INFO - База данных инициализирована
-2025-12-21 ... - INFO - Бот запущен. Администратор: 120661515
+2025-12-21 ... - INFO - Бот запущен. Администратор: ваш_telegram_id
 ```
 
 ### 2. Проверьте в Telegram
@@ -119,7 +119,7 @@ python3 -c "from handlers import admin, user, mailing; print('OK')"
 cat .env | grep MAIN_ADMIN_ID
 ```
 
-Должно быть: `MAIN_ADMIN_ID=120661515`
+Должно быть: `MAIN_ADMIN_ID=ваш_telegram_id`
 
 ---
 

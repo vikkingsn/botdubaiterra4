@@ -38,8 +38,8 @@
 
 ```env
 # Существующие настройки
-BOT_TOKEN=8558311268:AAFmtj9ZTr56ZziEGgsS5wY6tG9sinHkoXE
-MAIN_ADMIN_ID=120661515
+BOT_TOKEN=ваш_токен_от_BotFather
+MAIN_ADMIN_ID=ваш_telegram_id
 DATABASE_URL=sqlite+aiosqlite:///bot.db
 
 # Новые настройки для Client API
