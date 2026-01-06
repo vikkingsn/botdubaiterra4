@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Environment variables
+.env
+.env.local
+.en
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Telegram Client sessions
+*.session
+*.session-journal
+mailing_client.session
+
+# Private documentation (не отправлять в репозиторий)
+WORK_HISTORY.md
+CURRENT_STATUS.md
+PRIVATE_NOTES.md
